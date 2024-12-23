@@ -1,8 +1,9 @@
 name: Git Hub CI
 
-on
+on:
   push:
-    - main
+    branches:
+      - main
 
 jobs:
   Build-Image:
