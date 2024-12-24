@@ -1,4 +1,4 @@
-name: Build and Push Docker Image
+name: Build, Push, and Deploy Docker Image
 
 on:
   push:
@@ -6,7 +6,7 @@ on:
       - main
 
 jobs:
-  Build-and-Push:
+  Build-and-Deploy:
     runs-on: ubuntu-latest
 
     permissions:
@@ -40,33 +40,20 @@ jobs:
             ghcr.io/${{ github.repository }}:main
             ghcr.io/${{ github.repository }}:latest
 
-      # Etapa 5: Configurar chave SSH
-      - name: Set up SSH key
-        run: |
-          mkdir -p ~/.ssh
-          echo "${{ secrets.AWS_SSH_PRIVATE_KEY }}" > ~/.ssh/id_rsa
-          chmod 600 ~/.ssh/id_rsa
-          ssh-keyscan -H ${{ secrets.EC2_HOST }} >> ~/.ssh/known_hosts
+      # Etapa 5: Configurar credenciais AWS
+      - name: Configure AWS credentials
+        uses: aws-actions/configure-aws-credentials@v4
+        with:
+          aws-access-key-id: ${{ secrets.AWS_ACCESS_KEY_ID }}
+          aws-secret-access-key: ${{ secrets.AWS_SECRET_ACCESS_KEY }}
+          aws-region: ${{ secrets.AWS_REGION }}
 
-      # Etapa 6: Depurar configuração SSH
-      - name: Debug SSH setup
+      # Etapa 6: Fazer deploy diretamente na EC2
+      - name: Deploy on EC2
         run: |
-          echo "=== Listando arquivos em ~/.ssh ==="
-          ls -l ~/.ssh
-          echo "=== Conteúdo do arquivo ~/.ssh/known_hosts ==="
-          cat ~/.ssh/known_hosts
-
-      # Etapa 7: Testar conexão SSH
-      - name: Test SSH connection
-        run: |
-          ssh -o StrictHostKeyChecking=no -i ~/.ssh/id_rsa ${{ secrets.EC2_USER }}@${{ secrets.EC2_HOST }} "echo 'SSH connection successful'"
-
-      # Etapa 8: Conectar à EC2 e realizar o deploy
-      - name: Connect to EC2 and Deploy
-        run: |
-          ssh -o StrictHostKeyChecking=no -i ~/.ssh/id_rsa ${{ secrets.EC2_USER }}@${{ secrets.EC2_HOST }} << 'EOF'
-            docker pull ghcr.io/${{ github.repository }}:latest
-            docker stop meu-app || true
-            docker rm meu-app || true
-            docker run -d --name meu-app -p 80:80 ghcr.io/${{ github.repository }}:latest
-          EOF
+          aws ssm send-command \
+            --document-name "AWS-RunShellScript" \
+            --targets "Key=instanceIds,Values=${{ secrets.EC2_INSTANCE_ID }}" \
+            --comment "Deploying Docker container" \
+            --parameters commands="sudo docker pull ghcr.io/${{ github.repository }}:latest && sudo docker stop meu-app || true && sudo docker rm meu-app || true && sudo docker run -d --name meu-app -p 80:80 ghcr.io/${{ github.repository }}:latest" \
+            --output text
