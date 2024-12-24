@@ -1,4 +1,4 @@
-name: Git Hub CI
+name: Build and Push Docker Image
 
 on:
   push:
@@ -6,17 +6,15 @@ on:
       - main
 
 jobs:
-  Build-Image:
+  Build-and-Push:
     runs-on: ubuntu-latest
+
     permissions:
-      contents: read
       packages: write
-      id-token: write
+      contents: read
 
     steps:
-      - run: echo "🎉 The job was automatically triggered by a ${{ github.event_name }} event."
-
-      - name: Checkout tools repo
+      - name: Checkout repository
         uses: actions/checkout@v4
 
       - name: Set up Docker Buildx
@@ -27,22 +25,24 @@ jobs:
         with:
           registry: ghcr.io
           username: ${{ github.actor }}
-          password: ${{ secrets.GITHUB_TOKEN }}
+          password: ${{ secrets.TOKEN }}
+
+      - name: Test login to GitHub Container Registry
+        run: |
+          echo "${{ secrets.TOKEN }}" | docker login ghcr.io -u ${{ github.actor }} --password-stdin
 
       - name: Extract Docker metadata
         id: meta
         uses: docker/metadata-action@v5
         with:
-          images: |
-            ghcr.io/${{ github.repository }}
+          images: ghcr.io/${{ github.repository }}
 
-      - name: Build and push Docker Image
+      - name: Build and Push Docker Image
         uses: docker/build-push-action@v5
         with:
           context: .
-          push: ${{ github.event_name != 'pull_request' }}
-          tags: |
-            ${{ steps.meta.outputs.tags }}
-            ghcr.io/${{ github.repository }}:latest
+          push: true
+          tags: ${{ steps.meta.outputs.tags }}
           labels: ${{ steps.meta.outputs.labels }}
-          cache-from: type=inline
+          cache-from: type=registry,ref=ghcr.io/${{ github.repository }}:cache
+          cache-to: type=inline
