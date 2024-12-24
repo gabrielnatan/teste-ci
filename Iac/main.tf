@@ -26,7 +26,8 @@ provider "aws" {
 }
 
 resource "aws_instance" "aws-ec2-maneira" {
-  provider = aws.us-east-1
+  provider  = aws.us-east-1
+  user_data = file("script.sh")
 
   instance_type = "t2.micro"
   ami           = "ami-0e2c8caa4b6378d8c"
